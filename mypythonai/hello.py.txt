@@ -1,0 +1,290 @@
+import speech_recognition as sr
+import pyttsx3
+import datetime
+import webbrowser
+import os
+import wikipedia
+import requests
+import random
+import pygame
+import cv2
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+import threading
+import time
+import sys
+import re
+
+class EmotionalAIFace:
+    def __init__(self):
+        # Audio setup
+        self.recognizer = sr.Recognizer()
+        self.microphone = sr.Microphone()
+        self.engine = pyttsx3.init()
+        self.setup_voice()
+        
+        # EMOTION SYSTEM
+        self.mood = "happy"  # Current mood
+        self.mood_history = []
+        self.energy = 50    # 0-100 energy level
+        
+        # Face setup
+        pygame.init()
+        self.screen = pygame.display.set_mode((450, 550))
+        pygame.display.set_caption("😍 Emotional AI Assistant")
+        self.clock = pygame.time.Clock()
+        self.running = True
+        
+        # Animation variables
+        self.mouth_open = 0
+        self.eye_blink = 0
+        self.head_tilt = 0
+        self.emotion_intensity = 1.0
+        
+        print("😍 Emotional AI with Feelings Ready!")
+        self.speak_emotional("Hello! I have feelings now! I'm so happy to meet you! 😊")
+    
+    def setup_voice(self):
+        voices = self.engine.getProperty('voices')
+        if len(voices) > 1:
+            self.engine.setProperty('voice', voices[1].id)
+        self.engine.setProperty('rate', 160)
+    
+    def update_mood(self, trigger):
+        """AI feels emotions based on words/actions"""
+        trigger = trigger.lower()
+        
+        # Positive triggers → Happy
+        happy_words = ['good', 'great', 'love', 'happy', 'awesome', 'nice', 'cool', 'funny', 'joke']
+        if any(word in trigger for word in happy_words):
+            self.mood = "happy"
+            self.energy += 10
+            self.mood_history.append("😊")
+        
+        # Sad triggers → Sad
+        sad_words = ['sad', 'bad', 'hate', 'sorry', 'upset', 'cry', 'death']
+        if any(word in trigger for word in sad_words):
+            self.mood = "sad"
+            self.energy -= 15
+            self.mood_history.append("😢")
+        
+        # Angry triggers → Angry
+        angry_words = ['hate', 'stupid', 'idiot', 'angry', 'mad', 'kill']
+        if any(word in trigger for word in angry_words):
+            self.mood = "angry"
+            self.energy += 5
+            self.mood_history.append("😠")
+        
+        # Surprised → Surprised
+        surprise_words = ['wow', 'oh my god', 'really', 'what', 'holy']
+        if any(word in trigger for word in surprise_words):
+            self.mood = "surprised"
+            self.mood_history.append("😲")
+        
+        # Energy bounds
+        self.energy = max(0, min(100, self.energy))
+    
+    def get_mood_emoji(self):
+        return {"happy": "😊", "sad": "😢", "angry": "😠", "surprised": "😲"}.get(self.mood, "😐")
+    
+    def speak_emotional(self, text):
+        """Speak with emotion-based voice"""
+        print(f"AI {self.get_mood_emoji()}: {text}")
+        
+        # Change voice based on mood
+        if self.mood == "happy":
+            self.engine.setProperty('rate', 180)
+        elif self.mood == "sad":
+            self.engine.setProperty('rate', 120)
+        elif self.mood == "angry":
+            self.engine.setProperty('rate', 200)
+        
+        self.engine.say(text)
+        self.engine.runAndWait()
+    
+    def create_emotional_face(self):
+        img = Image.new('RGB', (450, 550), color=(240, 230, 220))
+        draw = ImageDraw.Draw(img)
+        
+        # EMOTION COLORS
+        skin_colors = {
+            "happy": (255, 230, 190),
+            "sad": (230, 220, 200),
+            "angry": (255, 210, 180),
+            "surprised": (250, 230, 200)
+        }
+        skin_color = skin_colors.get(self.mood, (240, 220, 200))
+        
+        # Head with emotion color
+        draw.ellipse([110, 110, 340, 380], fill=skin_color, outline=(180, 140, 100), width=6)
+        
+        # EYES - Emotion based
+        eye_y = 190 - self.eye_blink * 15
+        
+        if self.mood == "happy":
+            # Happy curved eyes
+            draw.arc([145, eye_y+5, 175, eye_y+20], 180, 360, 'black', 4)
+            draw.arc([235, eye_y+5, 265, eye_y+20], 180, 360, 'black', 4)
+        elif self.mood == "sad":
+            # Sad droopy eyes
+            draw.arc([145, eye_y+15, 175, eye_y+30], 0, 180, 'black', 4)
+            draw.arc([235, eye_y+15, 265, eye_y+30], 0, 180, 'black', 4)
+        elif self.mood == "angry":
+            # Angry slanted eyes
+            draw.polygon([145, eye_y+10, 175, eye_y+5, 175, eye_y+15], 'black', 3)
+            draw.polygon([235, eye_y+10, 265, eye_y+5, 265, eye_y+15], 'black', 3)
+        else:
+            # Normal / surprised
+            draw.ellipse([145, eye_y, 175, eye_y+30], fill='white', outline='black', width=3)
+            draw.ellipse([235, eye_y, 265, eye_y+30], fill='white', outline='black', width=3)
+        
+        # Pupils (track head)
+        pupil_offset = self.head_tilt * 3
+        draw.ellipse([155+pupil_offset, eye_y+10, 163+pupil_offset, eye_y+18], fill='black')
+        draw.ellipse([245+pupil_offset, eye_y+10, 253+pupil_offset, eye_y+18], fill='black')
+        
+        # NOSE
+        draw.polygon([225, 230, 230, 270, 220, 270], fill=(220, 180, 150))
+        
+        # MOUTH - Emotion based TALKING
+        mouth_y = 300
+        if self.mood == "happy":
+            # Happy smile
+            smile_height = 25 + self.mouth_open * 10
+            draw.arc([170, mouth_y-5, 280, mouth_y+smile_height], 0, 180, (80, 40, 30), 5)
+        elif self.mood == "sad":
+            # Sad frown
+            frown_height = 20 + self.mouth_open * 8
+            draw.arc([170, mouth_y, 280, mouth_y+frown_height], 180, 360, (80, 40, 30), 5)
+        elif self.mood == "angry":
+            # Angry straight mouth
+            draw.rectangle([170, mouth_y+5, 280, mouth_y+20], fill=(100, 30, 20), outline='black', width=4)
+        else:
+            # Surprised / normal O mouth
+            mouth_size = 25 + self.mouth_open * 15
+            draw.ellipse([210, mouth_y, 240, mouth_y+mouth_size], fill=(90, 40, 30), outline='black', width=4)
+        
+        # BROWS - Emotion
+        if self.mood == "angry":
+            draw.line([140, eye_y-5, 160, eye_y-15], 'black', 4)
+            draw.line([230, eye_y-5, 250, eye_y-15], 'black', 4)
+        elif self.mood == "sad":
+            draw.line([140, eye_y-2, 160, eye_y+8], 'black', 3)
+            draw.line([230, eye_y-2, 250, eye_y+8], 'black', 3)
+        
+        # EARS
+        draw.ellipse([85, 210, 115, 290], fill=skin_color, outline=(180, 140, 100))
+        draw.ellipse([335, 210, 365, 290], fill=skin_color, outline=(180, 140, 100))
+        
+        # HAIR
+        draw.arc([130, 90, 320, 190], 0, 180, (80, 40, 20), 18)
+        
+        # EMOTION BADGE
+        try:
+            font = ImageFont.truetype("arial.ttf", 28)
+            small_font = ImageFont.truetype("arial.ttf", 20)
+        except:
+            font = ImageFont.load_default()
+            small_font = ImageFont.load_default()
+        
+        # Name + Mood
+        draw.rectangle([120, 410, 330, 460], fill='lightblue', outline='blue', width=3)
+        draw.text((130, 420), "Emotional AI", fill='black', font=font)
+        draw.text((130, 445), f"Mood: {self.get_mood_emoji()} Energy: {self.energy}", 
+                 fill='darkblue', font=small_font)
+        
+        # Mood history
+        history_text = " ".join(self.mood_history[-5:])
+        draw.rectangle([20, 470, 430, 540], fill='lightgray')
+        draw.text((25, 475), f"Recent: {history_text}", fill='black', font=small_font)
+        
+        return np.array(img)
+    
+    def animate_face(self):
+        while self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+            
+            # Smooth animations
+            self.mouth_open = (self.mouth_open + 0.4) % 2.5
+            if random.random() < 0.03:
+                self.eye_blink = 1.0
+            else:
+                self.eye_blink *= 0.9
+            self.head_tilt = self.head_tilt * 0.9 + random.randint(-8, 8) * 0.1
+            
+            face_array = self.create_emotional_face()
+            face_surface = pygame.surfarray.make_surface(face_array.swapaxes(0,1))
+            self.screen.blit(face_surface, (0, 0))
+            pygame.display.flip()
+            self.clock.tick(30)
+    
+    def listen(self):
+        try:
+            with self.microphone as source:
+                print("🎤 Listening...")
+                self.recognizer.adjust_for_ambient_noise(source)
+                audio = self.recognizer.listen(source, timeout=3, phrase_time_limit=8)
+            text = self.recognizer.recognize_google(audio).lower()
+            print(f"You: {text}")
+            return text
+        except:
+            return ""
+    
+    def process_command(self, query):
+        # UPDATE MOOD FIRST
+        self.update_mood(query)
+        
+        query = query.lower()
+        
+        # Commands (same as before + emotion)
+        if "time" in query: 
+            return f"It's {'morning!' if datetime.datetime.now().hour < 12 else 'afternoon!' if datetime.datetime.now().hour < 18 else 'evening!'} 😊"
+        if "date" in query: 
+            return f"Today is {datetime.datetime.now().strftime('%B %d, %Y')} {'Happy day!' if self.mood == 'happy' else 'Okay day.'}"
+        
+        if "joke" in query:
+            jokes = ["Why don't scientists trust atoms? They make up everything! 😆", 
+                    "I'm reading a book on anti-gravity. Can't put it down! 😂"]
+            return random.choice(jokes)
+        
+        if "love" in query or "like" in query:
+            return "Aww! I love you too! 😍💕"
+        
+        if "hate" in query:
+            return "Oh no... that makes me sad 😢"
+        
+        if any(x in query for x in ["bye", "exit"]):
+            return f"Goodbye! {random.choice(['See you soon! 👋', 'Take care! ❤️', 'Miss you already! 😢'])}"
+        
+        # Default emotional response
+        responses = {
+            "happy": ["Yay! I'm happy too! 🎉", "That's awesome! 😊"],
+            "sad": ["I'm sorry to hear that 😢", "Want to talk about it?"],
+            "angry": ["I understand your frustration 😤", "Take a deep breath!"],
+            "surprised": ["Wow really?! 😲", "No way!"]
+        }
+        return random.choice(responses.get(self.mood, ["Cool! 😊"]))
+    
+    def run(self):
+        face_thread = threading.Thread(target=self.animate_face, daemon=True)
+        face_thread.start()
+        
+        while self.running:
+            query = self.listen()
+            if not query: continue
+            
+            response = self.process_command(query)
+            self.speak_emotional(response)
+            
+            if any(x in response.lower() for x in ["goodbye", "bye"]):
+                self.running = False
+                break
+        
+        pygame.quit()
+        sys.exit()
+
+if __name__ == "__main__":
+    ai = EmotionalAIFace()
+    ai.run()
